@@ -108,12 +108,12 @@ inline void initialize(T&)
 }
 
 template<class T>
-inline bool insert(T& t, std::string& key, std::string& value)
+inline bool insert(T& t, const std::string& key, const std::string& value)
 {
     return t.insert(key, value);
 }
 
-inline bool insert(UnorderedMap& t, std::string& key, std::string& value)
+inline bool insert(UnorderedMap& t, const std::string& key, const std::string& value)
 {
     t[key] = value;
     return t.end() != t.find(key);
@@ -148,9 +148,11 @@ inline size_t capacity(DenseHashMap& t)
     return t.size();
 }
 #endif
-
+static const int MinKeyLength = 4;
+static const int MaxKeyLength = 16;
+static const int MaxValueLength = 64;
 template<class T>
-Result measure(size_t numSamples, std::string* keys, std::string* values)
+Result measure(size_t numSamples, const std::string* keys, const std::string* values)
 {
     typedef T HashMapType;
     HashMapType hashmap;
@@ -183,14 +185,17 @@ Result measure(size_t numSamples, std::string* keys, std::string* values)
     size_t halfSamples = numSamples>>1;
     start = std::chrono::high_resolution_clock::now();
     for(size_t i=0; i<halfSamples; ++i){
+        HASSERT(MinKeyLength<=keys[i].length() && keys[i].length()<=MaxKeyLength);
         hashmap.erase(keys[i]);
         ++result.eraseCount_;
+        HASSERT(MinKeyLength<=keys[i].length() && keys[i].length()<=MaxKeyLength);
     }
     end = std::chrono::high_resolution_clock::now();
     result.erase_ = std::chrono::duration<double>(end-start).count();
 
     start = std::chrono::high_resolution_clock::now();
     for(size_t i=0; i<numSamples; ++i){
+        HASSERT(MinKeyLength<=keys[i].length() && keys[i].length()<=MaxKeyLength);
         typename HashMapType::iterator pos = hashmap.find(keys[i]);
         if(hashmap.end() == pos){
             ++result.find1Count_;
@@ -214,15 +219,9 @@ void print(const Result& result, const char* name)
 
 int main(int argc, char** argv)
 {
-    static const int MinKeyLength = 4;
-    static const int MaxKeyLength = 16;
-    static const int MaxValueLength = 64;
-
     size_t numSamples = 1000;
     int count = 10;
-    std::cout << argv[0] << std::endl;
     if(3<=argc){
-        std::cout << argv[0] << std::endl;
         numSamples = atoll(argv[1]);
         count = atoi(argv[2]);
         if(count<=0){
@@ -256,6 +255,7 @@ int main(int argc, char** argv)
             std::uniform_int_distribution<> distChars(0, strlen(ASCII)-1);
             for(size_t i=0; i<numSamples; ++i){
                 size_t keyLength = distKeyLength(random);
+                HASSERT(MinKeyLength<=keyLength && keyLength<=MaxKeyLength);
                 createRandomString(keys[i], keyLength, random, distChars);
 
                 size_t valueLength = distValueLength(random);

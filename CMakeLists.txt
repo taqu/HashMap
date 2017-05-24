@@ -22,8 +22,8 @@ if(MSVC)
         LINK_FLAGS_RELEASE "/LTCG /SUBSYSTEM:CONSOLE")
 
 elseif(UNIX)
-    set(CMAKE_CXX_FLAGS "-std=c++11")
-    set(CMAKE_CXX_FLAGS_DEBUG "-O0")
+    set(CMAKE_CXX_FLAGS "-std=c++11 -O2")
+    set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb3")
     set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
 elseif(APPLE)

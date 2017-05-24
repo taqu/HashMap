@@ -1204,8 +1204,7 @@ namespace hashmap
 
         size_type find_(hash_type hash, const_key_param_type key) const;
         void reserve_(size_type capacity);
-        bool insert_(Key& key, Value& value);
-        bool insert_(Key&& key, Value&& value);
+        bool insert_(const_key_param_type key, const_value_param_type value);
         void erase_(size_type pos);
         void expand(size_type capacity);
 
@@ -1280,9 +1279,7 @@ namespace hashmap
     template<class Key, class Value, class MemoryAllocator>
     bool RHHashMap<Key,Value,MemoryAllocator>::insert(const_key_param_type key, const_value_param_type value)
     {
-        key_type tkey(const_cast<key_param_type>(key));
-        value_type tvalue(const_cast<value_param_type>(value));
-        return insert_(tkey, tvalue);
+        return insert_(key, value);
     }
     
     template<class Key, class Value, class MemoryAllocator>
@@ -1381,10 +1378,11 @@ namespace hashmap
     {
         HASSERT(valid(dst));
         HASSERT(valid(src));
+        HASSERT(distances_[dst].isEmpty());
 
         distances_[dst].set(distance);
-        keys_[dst] = move(keys_[src]);
-        values_[dst] = move(values_[src]);
+        construct(&keys_[dst], move(keys_[src]));
+        construct(&values_[dst], move(values_[src]));
         destroy(src);
     }
 
@@ -1427,7 +1425,7 @@ namespace hashmap
     }
 
     template<class Key, class Value, class MemoryAllocator>
-    bool RHHashMap<Key,Value,MemoryAllocator>::insert_(Key& key, Value& value)
+    bool RHHashMap<Key,Value,MemoryAllocator>::insert_(const_key_param_type key, const_value_param_type value)
     {
         hash_type hash = calcHash_(key);
 
@@ -1440,57 +1438,23 @@ namespace hashmap
         size_type pos = hashToPos(hash);
         size_type end = pos + max_distance_;
 
+        key_type tkey(key);
+        value_type tvalue(value);
         for(;;){
             distance_type d = 0;
             for(size_type i=pos; i!=end; ++i,++d){
                 if(distances_[i].isEmpty()){
-                    emplace(d, i, key, value);
+                    emplace(d, i, tkey, tvalue);
                     return true;
                 }
                 if(distances_[i].distance_<d){
-                    hashmap::swap(keys_[i], key);
-                    hashmap::swap(values_[i], value);
+                    hashmap::swap(keys_[i], tkey);
+                    hashmap::swap(values_[i], tvalue);
                     hashmap::swap(distances_[i].distance_, d);
                 }
             }
             expand(capacity_+1);
-            hash = calcHash_(key);
-            pos = hashToPos(hash);
-            end = pos + max_distance_;
-        }
-    }
-
-    template<class Key, class Value, class MemoryAllocator>
-    bool RHHashMap<Key,Value,MemoryAllocator>::insert_(Key&& key, Value&& value)
-    {
-        hash_type hash = calcHash_(key);
-
-        if(capacity_<=0){
-            expand(capacity_+1);
-        }else if(valid(find_(hash, key))){
-            return false;
-        }
-
-        size_type pos = hashToPos(hash);
-        size_type end = pos + max_distance_;
-
-        distance_type distance=-1;
-        for(;;){
-            distance_type d = 0;
-            for(size_type i=pos; i!=end; ++i,++d){
-                if(distances_[i].distance_<d){
-                    if(distances_[i].isEmpty()){
-                        emplace(d, i, hashmap::move(key), hashmap::move(value));
-                        return true;
-                    }
-
-                    hashmap::swap(keys_[i], key);
-                    hashmap::swap(values_[i], value);
-                    hashmap::swap(distances_[i].distance_, d);
-                }
-            }
-            expand(capacity_+1);
-            hash = calcHash_(key);
+            hash = calcHash_(tkey);
             pos = hashToPos(hash);
             end = pos + max_distance_;
         }
