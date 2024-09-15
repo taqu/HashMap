@@ -11,7 +11,6 @@
 #endif
 
 #include "HashMap.h"
-#include "xxHash.h"
 
 static const char* ASCII = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
@@ -33,7 +32,7 @@ namespace hashmap
         template<>
         inline u32 calcHash<std::string>(const std::string& x)
         {
-            return hashmap::xxHash32(reinterpret_cast<const hashmap::u8*>(x.c_str()), static_cast<hashmap::s32>(x.size()));
+            return sph::sphash32(static_cast<uint32_t>(x.size()), reinterpret_cast<const void*>(x.c_str()));
         }
 
     }
@@ -71,15 +70,15 @@ struct Result
 
     Result& operator*=(double x)
     {
-        capacity_ *= x;
+        capacity_ = static_cast<size_t>(capacity_*x);
         insert_ *= x;
-        insertCount_ *= x;
+        insertCount_ = static_cast<size_t>(insertCount_*x);
         find0_ *= x;
-        find0Count_ *= x;
+        find0Count_ = static_cast<size_t>(find0Count_*x);
         erase_ *= x;
-        eraseCount_ *= x;
+        eraseCount_ = static_cast<size_t>(eraseCount_*x);
         find1_ *= x;
-        find1Count_ *= x;
+        find1Count_ = static_cast<size_t>(find1Count_*x);
         return *this;
     }
     size_t capacity_;
@@ -97,6 +96,7 @@ struct Result
 typedef hashmap::HashMap<std::string, std::string> HashMap;
 typedef hashmap::HopscotchHashMap<std::string, std::string> HopscotchHashMap;
 typedef hashmap::RHHashMap<std::string, std::string> RHHashMap;
+typedef hashmap::SwissTable<std::string, std::string> SwissTable;
 typedef std::unordered_map<std::string, std::string> UnorderedMap;
 #ifdef USE_DENSE_HASHMAP
 typedef google::dense_hash_map<std::string, std::string> DenseHashMap;
@@ -154,6 +154,7 @@ static const int MaxValueLength = 64;
 template<class T>
 Result measure(size_t numSamples, const std::string* keys, const std::string* values)
 {
+    static constexpr double inv = 1.0/1000000000.0;
     typedef T HashMapType;
     HashMapType hashmap;
     initialize(hashmap);
@@ -169,7 +170,7 @@ Result measure(size_t numSamples, const std::string* keys, const std::string* va
         }
     }
     end = std::chrono::high_resolution_clock::now();
-    result.insert_ = std::chrono::duration<double>(end-start).count();
+    result.insert_ = inv * std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
     result.capacity_ = capacity(hashmap);
 
     start = std::chrono::high_resolution_clock::now();
@@ -180,7 +181,8 @@ Result measure(size_t numSamples, const std::string* keys, const std::string* va
         }
     }
     end = std::chrono::high_resolution_clock::now();
-    result.find0_ = std::chrono::duration<double>(end-start).count();
+    result.find0_ = inv * std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
+    HASSERT(numSamples == result.find0Count_);
 
     size_t halfSamples = numSamples>>1;
     start = std::chrono::high_resolution_clock::now();
@@ -191,19 +193,18 @@ Result measure(size_t numSamples, const std::string* keys, const std::string* va
         HASSERT(MinKeyLength<=keys[i].length() && keys[i].length()<=MaxKeyLength);
     }
     end = std::chrono::high_resolution_clock::now();
-    result.erase_ = std::chrono::duration<double>(end-start).count();
+    result.erase_ = inv * std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
 
     start = std::chrono::high_resolution_clock::now();
     for(size_t i=0; i<numSamples; ++i){
         HASSERT(MinKeyLength<=keys[i].length() && keys[i].length()<=MaxKeyLength);
         typename HashMapType::iterator pos = hashmap.find(keys[i]);
-        if(hashmap.end() == pos){
+        if(hashmap.end() != pos){
             ++result.find1Count_;
         }
     }
     end = std::chrono::high_resolution_clock::now();
-    result.find1_ = std::chrono::duration<double>(end-start).count();
-
+    result.find1_ = inv * std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
     return result;
 }
 
@@ -219,7 +220,7 @@ void print(const Result& result, const char* name)
 
 int main(int argc, char** argv)
 {
-    size_t numSamples = 1000;
+    size_t numSamples = 100000;//10000000;//1000;
     int count = 10;
     if(3<=argc){
         numSamples = atoll(argv[1]);
@@ -233,10 +234,12 @@ int main(int argc, char** argv)
     Result totalHashMap;
     Result totalHopscotch;
     Result totalRobinHood;
+    Result totalSwissTable;
     Result totalUnordered;
     totalHashMap.clear();
     totalHopscotch.clear();
     totalRobinHood.clear();
+    totalSwissTable.clear();
     totalUnordered.clear();
 
 #ifdef USE_DENSE_HASHMAP
@@ -252,7 +255,7 @@ int main(int argc, char** argv)
             std::mt19937 random(device());
             std::uniform_int_distribution<> distKeyLength(MinKeyLength, MaxKeyLength);
             std::uniform_int_distribution<> distValueLength(0, MaxValueLength);
-            std::uniform_int_distribution<> distChars(0, strlen(ASCII)-1);
+            std::uniform_int_distribution<> distChars(0, (int32_t)(strlen(ASCII)-1));
             for(size_t i=0; i<numSamples; ++i){
                 size_t keyLength = distKeyLength(random);
                 HASSERT(MinKeyLength<=keyLength && keyLength<=MaxKeyLength);
@@ -272,6 +275,8 @@ int main(int argc, char** argv)
         totalHopscotch += result;
         result = measure<RHHashMap>(numSamples, keys, values);
         totalRobinHood += result;
+        result = measure<SwissTable>(numSamples, keys, values);
+        totalSwissTable += result;
         result = measure<UnorderedMap>(numSamples, keys, values);
         totalUnordered += result;
 #ifdef USE_DENSE_HASHMAP
@@ -286,11 +291,13 @@ int main(int argc, char** argv)
     totalHashMap *= inv;
     totalHopscotch *= inv;
     totalRobinHood *= inv;
+    totalSwissTable *= inv;
     totalUnordered *= inv;
 
     print(totalHashMap, "HashMap");
     print(totalHopscotch, "Hopscotch");
     print(totalRobinHood, "RobinHood");
+    print(totalSwissTable, "SwissTable");
     print(totalUnordered, "std::unordered_map");
 
 #ifdef USE_DENSE_HASHMAP

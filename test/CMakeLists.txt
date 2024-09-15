@@ -1,18 +1,13 @@
 cmake_minimum_required(VERSION 3.25)
 
-set(ProjectName HashMapPerf)
+set(ProjectName HashMapTest)
 project(${ProjectName})
 
-set(PROJECT_VERSION_MAJOR 1)
-set(PROJECT_VERSION_MINOR 0)
-set(PROJECT_VERSION_PATCH 0)
-set(PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH})
-
-set(CMAKE_CONFIGURATION_TYPES "Debug" "Release")
-
+include_directories(AFTER ${CMAKE_CURRENT_SOURCE_DIR}/..)
 include_directories(AFTER ${CMAKE_CURRENT_SOURCE_DIR})
 
-set(FILES "main.cpp;HashMap.h;sphash.h;sphash.cpp;common.h")
+set(SOURCE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set(FILES "main.cpp;${SOURCE_ROOT}/HashMap.h;${SOURCE_ROOT}/sphash.h;${SOURCE_ROOT}/sphash.cpp;${SOURCE_ROOT}/common.h")
 
 add_executable(${ProjectName} ${FILES})
 
@@ -38,4 +33,3 @@ elseif(UNIX)
 elseif(APPLE)
 endif()
 
-add_subdirectory(test)
